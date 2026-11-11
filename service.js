@@ -9,7 +9,7 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.0.0';
+    var VERSION = '1.0.1';
     var PORT = 8097;
     var TT_SERVICE = 'https://cdn.jsdelivr.net/npm/@foxreis/tizentube/dist/service.js';
     var DBUS = '/usr/bin/dbus-send';
@@ -35,17 +35,34 @@
 
     // ---------- 1) TizenTube officiel ----------
     function startTizenTube() {
-        try {
-            var fetch = require('node-fetch');
-            fetch(TT_SERVICE).then(function (r) { return r.text(); }).then(function (code) {
+        // https natif de Node (node-fetch n'est pas accessible depuis le bac a sable des modules)
+        function get(url, redirects, cb) {
+            var req;
+            try { req = require('https').get(url, onRes); } catch (e) { cb(String(e)); return; }
+            req.on('error', function (e) { cb(String(e)); });
+            function onRes(res) {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) {
+                    res.resume();
+                    get(require('url').resolve(url, res.headers.location), redirects - 1, cb);
+                    return;
+                }
+                if (res.statusCode !== 200) { res.resume(); cb('HTTP ' + res.statusCode); return; }
+                var chunks = [];
+                res.on('data', function (c) { chunks.push(c); });
+                res.on('end', function () { cb(null, Buffer.concat(chunks).toString('utf8')); });
+            }
+        }
+        get(TT_SERVICE, 3, function (err, code) {
+            if (err) { ttStatus = 'erreur: ' + err; log(ttStatus); return; }
+            try {
                 var sb = {};
                 Object.getOwnPropertyNames(root).forEach(function (k) { sb[k] = root[k]; });
                 sb.module = { exports: {} };
                 vm.runInContext(code, vm.createContext(sb));
                 ttStatus = 'ok';
                 log('TizenTube service demarre');
-            }).catch(function (e) { ttStatus = 'erreur: ' + e; log(ttStatus); });
-        } catch (e) { ttStatus = 'erreur: ' + e; log(ttStatus); }
+            } catch (e) { ttStatus = 'erreur: ' + e; log(ttStatus); }
+        });
     }
 
     // ---------- 2) Capture ----------

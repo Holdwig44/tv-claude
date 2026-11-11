@@ -9,7 +9,7 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.0.1';
+    var VERSION = '1.0.2';
     var PORT = 8097;
     var TT_SERVICE = 'https://cdn.jsdelivr.net/npm/@foxreis/tizentube/dist/service.js';
     var DBUS = '/usr/bin/dbus-send';
@@ -56,8 +56,18 @@
             if (err) { ttStatus = 'erreur: ' + err; log(ttStatus); return; }
             try {
                 var sb = {};
-                Object.getOwnPropertyNames(root).forEach(function (k) { sb[k] = root[k]; });
+                try { Object.getOwnPropertyNames(root).forEach(function (k) { sb[k] = root[k]; }); } catch (e) { }
+                // Node 4 (TV) : les variables du bac a sable TizenBrew ne sont pas listees, on les passe explicitement
+                sb.require = require;
+                sb.tizen = (typeof tizen !== 'undefined') ? tizen : undefined;
+                sb.process = process;
+                sb.console = console;
+                sb.Buffer = Buffer;
+                sb.setTimeout = setTimeout; sb.clearTimeout = clearTimeout;
+                sb.setInterval = setInterval; sb.clearInterval = clearInterval;
+                if (typeof setImmediate !== 'undefined') { sb.setImmediate = setImmediate; }
                 sb.module = { exports: {} };
+                sb.exports = sb.module.exports;
                 vm.runInContext(code, vm.createContext(sb));
                 ttStatus = 'ok';
                 log('TizenTube service demarre');
